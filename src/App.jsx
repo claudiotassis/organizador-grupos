@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { participantesDB } from './lib/supabase';
-import { Users, Camera, Palette, Music, BookOpen, Scissors, Search, Languages, Shirt, Box, Eye, EyeOff, UserPlus, Download, Upload, X, Edit3, Check, Menu, List, BarChart3 } from 'lucide-react';
+import { participantesDB, cronogramasDB } from './lib/supabase';
+import { Users, Camera, Palette, Music, BookOpen, Scissors, Search, Languages, Shirt, Box, Eye, EyeOff, UserPlus, Download, Upload, X, Edit3, Check, Menu, List, BarChart3, Calendar, ChevronLeft, ChevronRight, Plus, Clock, Target } from 'lucide-react';
 
 const App = () => {
   // Estados principais
@@ -19,11 +19,28 @@ const App = () => {
   const [modalExportar, setModalExportar] = useState(false);
   const [modalImportar, setModalImportar] = useState(false);
   const [modalSenha, setModalSenha] = useState(false);
+  const [modalCronograma, setModalCronograma] = useState(false);
   
   // Estados de autenticação
   const [senhaDigitada, setSenhaDigitada] = useState('');
   const [acaoProtegida, setAcaoProtegida] = useState(null);
   const [autenticado, setAutenticado] = useState(false);
+
+  // Estados do calendário
+  const [dataAtual, setDataAtual] = useState(new Date());
+  const [dataSelecionada, setDataSelecionada] = useState(new Date());
+  const [cronogramas, setCronogramas] = useState([]);
+  const [cronogramasMes, setCronogramasMes] = useState([]);
+  const [cronogramaEditando, setCronogramaEditando] = useState(null);
+  
+  // Estados do cronograma
+  const [novoCronograma, setNovoCronograma] = useState({
+    titulo: '',
+    descricao: '',
+    grupo_alvo: 'todos',
+    pontuacao: 0,
+    atividades: []
+  });
 
   const [novoAluno, setNovoAluno] = useState({ nome: '', turma: '8º A' });
   const [grupoAtual, setGrupoAtual] = useState('');
@@ -139,7 +156,18 @@ const App = () => {
   // Carregar dados do banco ao inicializar
   useEffect(() => {
     carregarParticipantes();
-  }, []);
+    if (abaAtiva === 'calendario') {
+      carregarCronogramasMes();
+      carregarCronogramasData();
+    }
+  }, [abaAtiva, dataAtual]);
+
+  // Carregar cronogramas quando muda a data selecionada
+  useEffect(() => {
+    if (abaAtiva === 'calendario') {
+      carregarCronogramasData();
+    }
+  }, [dataSelecionada, abaAtiva]);
 
   // Senha de administrador
   const SENHA_ADMIN = 'C$!lv@745515';
@@ -221,6 +249,188 @@ const App = () => {
       acao();
     }
   };
+
+  // Funções do calendário
+  const carregarCronogramasMes = async () => {
+    try {
+      const cronogramas = await cronogramasDB.getByMes(
+        dataAtual.getFullYear(), 
+        dataAtual.getMonth() + 1
+      );
+      setCronogramasMes(cronogramas);
+    } catch (error) {
+      console.error('Erro ao carregar cronogramas do mês:', error);
+      setMensagem({ tipo: 'erro', texto: 'Erro ao carregar cronogramas do mês' });
+    }
+  };
+
+  const carregarCronogramasData = async () => {
+    try {
+      const dataFormatada = formatarData(dataSelecionada);
+      const cronogramas = await cronogramasDB.getByData(dataFormatada);
+      setCronogramas(cronogramas);
+    } catch (error) {
+      console.error('Erro ao carregar cronogramas da data:', error);
+      setMensagem({ tipo: 'erro', texto: 'Erro ao carregar cronogramas' });
+    }
+  };
+
+  const formatarData = (data) => {
+    return data.toISOString().split('T')[0];
+  };
+
+  const abrirModalCronogramaProtegido = (cronograma = null) => {
+    const acao = () => {
+      if (cronograma) {
+        setCronogramaEditando(cronograma);
+        setNovoCronograma({
+          titulo: cronograma.titulo,
+          descricao: cronograma.descricao || '',
+          grupo_alvo: cronograma.grupo_alvo || 'todos',
+          pontuacao: cronograma.pontuacao || 0,
+          atividades: cronograma.cronograma_atividades || []
+        });
+      } else {
+        setCronogramaEditando(null);
+        setNovoCronograma({
+          titulo: '',
+          descricao: '',
+          grupo_alvo: 'todos',
+          pontuacao: 0,
+          atividades: []
+        });
+      }
+      setModalCronograma(true);
+    };
+    
+    if (verificarAutenticacao(acao)) {
+      acao();
+    }
+  };
+
+  const salvarCronograma = async () => {
+    if (!novoCronograma.titulo.trim()) return;
+    
+    try {
+      const dadosCronograma = {
+        data: formatarData(dataSelecionada),
+        titulo: novoCronograma.titulo.trim(),
+        descricao: novoCronograma.descricao.trim(),
+        grupo_alvo: novoCronograma.grupo_alvo,
+        pontuacao: parseFloat(novoCronograma.pontuacao) || 0
+      };
+
+      if (cronogramaEditando) {
+        await cronogramasDB.atualizar(cronogramaEditando.id, dadosCronograma, novoCronograma.atividades);
+        setMensagem({ tipo: 'sucesso', texto: 'Cronograma atualizado!' });
+      } else {
+        await cronogramasDB.criar(dadosCronograma, novoCronograma.atividades);
+        setMensagem({ tipo: 'sucesso', texto: 'Cronograma criado!' });
+      }
+
+      setModalCronograma(false);
+      carregarCronogramasData();
+      carregarCronogramasMes();
+    } catch (error) {
+      console.error('Erro ao salvar cronograma:', error);
+      setMensagem({ tipo: 'erro', texto: 'Erro ao salvar cronograma: ' + error.message });
+    }
+  };
+
+  const deletarCronogramaProtegido = async (cronogramaId) => {
+    const acao = async () => {
+      try {
+        await cronogramasDB.deletar(cronogramaId);
+        setMensagem({ tipo: 'sucesso', texto: 'Cronograma deletado!' });
+        carregarCronogramasData();
+        carregarCronogramasMes();
+      } catch (error) {
+        console.error('Erro ao deletar cronograma:', error);
+        setMensagem({ tipo: 'erro', texto: 'Erro ao deletar cronograma: ' + error.message });
+      }
+    };
+    
+    if (verificarAutenticacao(acao)) {
+      acao();
+    }
+  };
+
+  const adicionarAtividade = () => {
+    setNovoCronograma(prev => ({
+      ...prev,
+      atividades: [...prev.atividades, { grupo_id: 'grupo1', atividade: '' }]
+    }));
+  };
+
+  const removerAtividade = (index) => {
+    setNovoCronograma(prev => ({
+      ...prev,
+      atividades: prev.atividades.filter((_, i) => i !== index)
+    }));
+  };
+
+  const atualizarAtividade = (index, campo, valor) => {
+    setNovoCronograma(prev => ({
+      ...prev,
+      atividades: prev.atividades.map((ativ, i) => 
+        i === index ? { ...ativ, [campo]: valor } : ativ
+      )
+    }));
+  };
+
+  // Funções auxiliares do calendário
+  const obterDiasDoMes = (data) => {
+    const ano = data.getFullYear();
+    const mes = data.getMonth();
+    const primeiroDia = new Date(ano, mes, 1);
+    const ultimoDia = new Date(ano, mes + 1, 0);
+    const diasDoMesAnterior = primeiroDia.getDay();
+    
+    const dias = [];
+    
+    // Dias do mês anterior
+    for (let i = diasDoMesAnterior - 1; i >= 0; i--) {
+      const dia = new Date(primeiroDia);
+      dia.setDate(dia.getDate() - i - 1);
+      dias.push({ data: dia, outroMes: true });
+    }
+    
+    // Dias do mês atual
+    for (let dia = 1; dia <= ultimoDia.getDate(); dia++) {
+      dias.push({ data: new Date(ano, mes, dia), outroMes: false });
+    }
+    
+    // Dias do próximo mês
+    const diasRestantes = 42 - dias.length;
+    for (let dia = 1; dia <= diasRestantes; dia++) {
+      const proximaData = new Date(ano, mes + 1, dia);
+      dias.push({ data: proximaData, outroMes: true });
+    }
+    
+    return dias;
+  };
+
+  const temCronogramaNaData = (data) => {
+    const dataString = formatarData(data);
+    return cronogramasMes.some(c => c.data === dataString);
+  };
+
+  const navegarMes = (direcao) => {
+    const novaData = new Date(dataAtual);
+    novaData.setMonth(novaData.getMonth() + direcao);
+    setDataAtual(novaData);
+  };
+
+  const selecionarData = (data) => {
+    setDataSelecionada(data);
+  };
+
+  const obterNomesMeses = () => [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ];
+
+  const obterNomesDias = () => ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
   const carregarParticipantes = async () => {
     try {
@@ -537,7 +747,7 @@ const App = () => {
     }
   };
 
-  // Limpar mensagens automaticamente
+// Limpar mensagens automaticamente
   useEffect(() => {
     if (mensagem) {
       const timer = setTimeout(() => setMensagem(null), 3000);
@@ -659,6 +869,17 @@ const App = () => {
           >
             <BarChart3 className="w-4 h-4" />
             Listagem Completa
+          </button>
+          <button
+            onClick={() => setAbaAtiva('calendario')}
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium transition-colors ${
+              abaAtiva === 'calendario' 
+                ? 'border-blue-500 text-blue-600' 
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            Calendário
           </button>
         </div>
       </div>
@@ -1002,6 +1223,200 @@ const App = () => {
         </div>
       )}
 
+      {/* Aba Calendário */}
+      {abaAtiva === 'calendario' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Calendário - Lado Esquerdo */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800">
+                {obterNomesMeses()[dataAtual.getMonth()]} {dataAtual.getFullYear()}
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => navegarMes(-1)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => navegarMes(1)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Cabeçalho dos dias da semana */}
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {obterNomesDias().map(dia => (
+                <div key={dia} className="p-2 text-center text-sm font-medium text-gray-500">
+                  {dia}
+                </div>
+              ))}
+            </div>
+
+            {/* Grade do calendário */}
+            <div className="grid grid-cols-7 gap-1">
+              {obterDiasDoMes(dataAtual).map((item, index) => {
+                const isHoje = item.data.toDateString() === new Date().toDateString();
+                const isSelecionado = item.data.toDateString() === dataSelecionada.toDateString();
+                const temCronograma = !item.outroMes && temCronogramaNaData(item.data);
+                
+                return (
+                  <button
+                    key={index}
+                    onClick={() => !item.outroMes && selecionarData(item.data)}
+                    disabled={item.outroMes}
+                    className={`
+                      relative p-2 h-12 text-sm transition-all duration-200
+                      ${item.outroMes 
+                        ? 'text-gray-300 cursor-not-allowed' 
+                        : 'hover:bg-blue-50 cursor-pointer'
+                      }
+                      ${isSelecionado && !item.outroMes 
+                        ? 'bg-blue-500 text-white rounded-lg' 
+                        : ''
+                      }
+                      ${isHoje && !isSelecionado && !item.outroMes 
+                        ? 'bg-blue-100 text-blue-800 rounded-lg font-bold' 
+                        : ''
+                      }
+                    `}
+                  >
+                    <span>{item.data.getDate()}</span>
+                    {temCronograma && (
+                      <div className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
+                        isSelecionado ? 'bg-white' : 'bg-blue-500'
+                      }`}></div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Cronogramas - Lado Direito */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">
+                  Cronograma do Dia
+                </h3>
+                <p className="text-gray-600 text-sm">
+                  {dataSelecionada.toLocaleDateString('pt-BR', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric'
+                  })}
+                </p>
+              </div>
+              <button
+                onClick={() => abrirModalCronogramaProtegido()}
+                className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Novo Cronograma
+              </button>
+            </div>
+
+            {/* Lista de cronogramas do dia */}
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {cronogramas.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>Nenhum cronograma para este dia</p>
+                  <p className="text-sm">Clique em "Novo Cronograma" para adicionar</p>
+                </div>
+              ) : (
+                cronogramas.map((cronograma) => (
+                  <div key={cronograma.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 text-lg">{cronograma.titulo}</h4>
+                        {cronograma.descricao && (
+                          <p className="text-gray-600 text-sm mt-1">{cronograma.descricao}</p>
+                        )}
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="flex items-center gap-1 text-sm">
+                            <Target className="w-4 h-4 text-blue-500" />
+                            <span className="text-gray-600">
+                              {cronograma.grupo_alvo === 'todos' ? 'Todos os grupos' : 
+                               grupos[cronograma.grupo_alvo]?.nome || cronograma.grupo_alvo}
+                            </span>
+                          </div>
+                          {cronograma.pontuacao > 0 && (
+                            <div className="flex items-center gap-1 text-sm">
+                              <span className="text-yellow-600 font-semibold">
+                                {cronograma.pontuacao} pts
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => abrirModalCronogramaProtegido(cronograma)}
+                          className="text-blue-600 hover:text-blue-800 p-1"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deletarCronogramaProtegido(cronograma.id)}
+                          className="text-red-600 hover:text-red-800 p-1"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Atividades por grupo */}
+                    {cronograma.cronograma_atividades && cronograma.cronograma_atividades.length > 0 && (
+                      <div className="space-y-3">
+                        {Object.entries(grupos).map(([grupoId, grupo]) => {
+                          const atividadesGrupo = cronograma.cronograma_atividades.filter(
+                            ativ => ativ.grupo_id === grupoId
+                          );
+                          
+                          if (atividadesGrupo.length === 0) return null;
+                          
+                          return (
+                            <div key={grupoId} className="border-l-4 pl-3" 
+                                 style={{ borderLeftColor: 
+                                   grupo.corHeader === 'bg-purple-500' ? '#8b5cf6' :
+                                   grupo.corHeader === 'bg-blue-500' ? '#3b82f6' :
+                                   grupo.corHeader === 'bg-green-500' ? '#10b981' :
+                                   '#f59e0b'
+                                 }}>
+                              <h5 className="font-medium text-gray-700 mb-2">{grupo.nome}</h5>
+                              <ul className="space-y-1">
+                                {atividadesGrupo.map((atividade) => (
+                                  <li key={atividade.id} className="flex items-start gap-2 text-sm">
+                                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                                      grupo.corHeader === 'bg-purple-500' ? 'bg-purple-500' :
+                                      grupo.corHeader === 'bg-blue-500' ? 'bg-blue-500' :
+                                      grupo.corHeader === 'bg-green-500' ? 'bg-green-500' :
+                                      'bg-amber-500'
+                                    }`}></div>
+                                    <span className="text-gray-700">{atividade.atividade}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Senha de Administrador */}
       {modalSenha && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1040,6 +1455,138 @@ const App = () => {
                 className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Autenticar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Cronograma */}
+      {modalCronograma && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-90vh overflow-auto mx-4">
+            <h3 className="text-lg font-bold mb-4">
+              {cronogramaEditando ? 'Editar Cronograma' : 'Novo Cronograma'}
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Título:</label>
+                  <input
+                    type="text"
+                    value={novoCronograma.titulo}
+                    onChange={(e) => setNovoCronograma(prev => ({ ...prev, titulo: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Ex: Aula sobre Performance"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Descrição:</label>
+                  <textarea
+                    value={novoCronograma.descricao}
+                    onChange={(e) => setNovoCronograma(prev => ({ ...prev, descricao: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 h-20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Descrição detalhada das atividades"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Grupo Alvo:</label>
+                    <select
+                      value={novoCronograma.grupo_alvo}
+                      onChange={(e) => setNovoCronograma(prev => ({ ...prev, grupo_alvo: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="todos">Todos os grupos</option>
+                      {Object.entries(grupos).map(([id, grupo]) => (
+                        <option key={id} value={id}>{grupo.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pontuação:</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="10"
+                      value={novoCronograma.pontuacao}
+                      onChange={(e) => setNovoCronograma(prev => ({ ...prev, pontuacao: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.0"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-medium text-gray-700">Atividades por Grupo:</label>
+                  <button
+                    onClick={adicionarAtividade}
+                    className="flex items-center gap-1 bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Adicionar
+                  </button>
+                </div>
+                
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {novoCronograma.atividades.map((atividade, index) => (
+                    <div key={index} className="flex gap-2 p-3 border rounded-lg bg-gray-50">
+                      <select
+                        value={atividade.grupo_id}
+                        onChange={(e) => atualizarAtividade(index, 'grupo_id', e.target.value)}
+                        className="border rounded px-2 py-1 text-sm"
+                      >
+                        {Object.entries(grupos).map(([id, grupo]) => (
+                          <option key={id} value={id}>
+                            {grupo.nome.replace(/Grupo \d+ - /, '')}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={atividade.atividade}
+                        onChange={(e) => atualizarAtividade(index, 'atividade', e.target.value)}
+                        className="flex-1 border rounded px-2 py-1 text-sm"
+                        placeholder="Descrição da atividade"
+                      />
+                      <button
+                        onClick={() => removerAtividade(index)}
+                        className="text-red-600 hover:text-red-800 p-1"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {novoCronograma.atividades.length === 0 && (
+                    <p className="text-gray-500 text-sm italic text-center py-4">
+                      Nenhuma atividade específica por grupo. Clique em "Adicionar" para criar.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setModalCronograma(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={salvarCronograma}
+                disabled={!novoCronograma.titulo.trim()}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {cronogramaEditando ? 'Atualizar' : 'Criar'} Cronograma
               </button>
             </div>
           </div>
