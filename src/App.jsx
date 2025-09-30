@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { participantesDB, cronogramasDB } from './lib/supabase';
 import { Users, Camera, Palette, Music, BookOpen, Scissors, Search, Languages, Shirt, Box, Eye, EyeOff, UserPlus, Download, Upload, X, Edit3, Check, Menu, List, BarChart3, Calendar, ChevronLeft, ChevronRight, Plus, Clock, Target } from 'lucide-react';
+import RotarioLivro from './components/RotarioLivro';
 
 const App = () => {
   // Estados principais
@@ -754,8 +755,7 @@ const App = () => {
       return () => clearTimeout(timer);
     }
   }, [mensagem]);
-
-  // Dados calculados
+// Dados calculados
   const contagemTurmas = contarPorTurma();
   const participantesPorTurma = obterParticipantesPorTurma();
   const listagemCompleta = obterListagemCompleta();
@@ -880,6 +880,17 @@ const App = () => {
           >
             <Calendar className="w-4 h-4" />
             Calendário
+          </button>
+          <button
+            onClick={() => setAbaAtiva('roteiro')}
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium transition-colors ${
+              abaAtiva === 'roteiro' 
+                ? 'border-blue-500 text-blue-600' 
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            Roteiro
           </button>
         </div>
       </div>
@@ -1304,7 +1315,7 @@ const App = () => {
                 <h3 className="text-xl font-bold text-gray-800">
                   Cronograma do Dia
                 </h3>
-                <p className="text-gray-600 text-sm">
+             <p className="text-gray-600 text-sm">
                   {dataSelecionada.toLocaleDateString('pt-BR', { 
                     weekday: 'long', 
                     year: 'numeric', 
@@ -1415,6 +1426,11 @@ const App = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Aba Roteiro */}
+      {abaAtiva === 'roteiro' && (
+        <RotarioLivro />
       )}
 
       {/* Modal Senha de Administrador */}
