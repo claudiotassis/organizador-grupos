@@ -518,8 +518,7 @@ const RoteiroMusicalLivro = () => {
                     </div>
                     <p className="text-gray-600 text-sm mb-2">(Protagonista entra lentamente, caminhando com passos pesados, expressão abatida)</p>
                     <p className="text-gray-700 mb-2"><strong>Protagonista:</strong> "Eu tenho lutado por tanto tempo... mas nada dá certo. Estou cansada de tudo isso!"</p>
-                    <p className="text-gray-600 text-sm mb-2">(Uma voz sussurra - fora do palco)</p>
-                    <p className="text-gray-700 italic"><strong>Voz:</strong> "Nãããããooooo..."</p>
+                    
                   </div>
                 </div>
 
